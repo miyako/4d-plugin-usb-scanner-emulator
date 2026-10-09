@@ -1,0 +1,3 @@
+GOTO OBJECT:C206(*; "input")
+
+POST TEXT("C970307"*5)
