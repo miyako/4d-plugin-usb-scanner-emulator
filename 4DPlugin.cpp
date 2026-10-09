@@ -12,6 +12,10 @@
 #include "4DPluginAPI.h"
 #include "4DPlugin.h"
 
+#if VERSIONWIN
+#include <vector>
+#endif
+
 void PluginMain(PA_long32 selector, PA_PluginParameters params)
 {
 	try
@@ -45,72 +49,163 @@ void CommandDispatcher (PA_long32 pProcNum, sLONG_PTR *pResult, PackagePtr pPara
 
 #if VERSIONMAC
 
-CGKeyCode VkKeyScan(UniChar c)
+// a key to press: the (layout-position based) virtual key code, and whether Shift is needed
+struct MacKey
 {
+	CGKeyCode code;
+	bool shift;
+};
+
+// returns false if the character has no mapping (it is then skipped, not typed)
+static bool mac_key_for_char(UniChar c, MacKey &k)
+{
+	k.shift = false;
+	
+	// letters: upper case = same key + Shift
+	if((c >= 'A') && (c <= 'Z'))
+	{
+		k.shift = true;
+		c = (UniChar)(c + ('a' - 'A'));
+	}
+	
 	switch (c)
-    {
-        case '0': return kVK_ANSI_Keypad0;
-        case '1': return kVK_ANSI_Keypad1;
-        case '2': return kVK_ANSI_Keypad2;
-        case '3': return kVK_ANSI_Keypad3;
-        case '4': return kVK_ANSI_Keypad4;
-        case '5': return kVK_ANSI_Keypad5;
-        case '6': return kVK_ANSI_Keypad6;
-        case '7': return kVK_ANSI_Keypad7;
-        case '8': return kVK_ANSI_Keypad8;
-        case '9': return kVK_ANSI_Keypad9;
-
-        case '=': return kVK_ANSI_KeypadEquals;
-        case '-': return kVK_ANSI_KeypadMinus;
-        case '+': return kVK_ANSI_KeypadPlus;
-        case '*': return kVK_ANSI_KeypadMultiply;
-        case '\n': return kVK_ANSI_KeypadEnter;
-				
-        case '\r': return kVK_Return;
-        case '\t': return kVK_Tab;
-
-        case ' ': return kVK_Space;
-				
-        case ')': return kVK_ANSI_RightBracket;
-        case '(': return kVK_ANSI_LeftBracket;
-        case ':': return kVK_ANSI_Quote;
-        case ';': return kVK_ANSI_Semicolon;
-        case '\\': return kVK_ANSI_Backslash;
-        case ',': return kVK_ANSI_Comma;
-        case '/': return kVK_ANSI_Slash;
-        case '.': return kVK_ANSI_Period;
-				
-        case 'a': case 'A': return kVK_ANSI_A;
-        case 'b': case 'B': return kVK_ANSI_B;
-        case 'c': case 'C': return kVK_ANSI_C;
-        case 'd': case 'D': return kVK_ANSI_D;
-        case 'e': case 'E': return kVK_ANSI_E;
-        case 'f': case 'F': return kVK_ANSI_F;
-        case 'g': case 'G': return kVK_ANSI_G;
-        case 'h': case 'H': return kVK_ANSI_H;
-        case 'i': case 'I': return kVK_ANSI_I;
-        case 'j': case 'J': return kVK_ANSI_J;
-        case 'k': case 'K': return kVK_ANSI_K;
-        case 'l': case 'L': return kVK_ANSI_L;
-        case 'm': case 'M': return kVK_ANSI_M;
-        case 'n': case 'N': return kVK_ANSI_N;
-        case 'o': case 'O': return kVK_ANSI_O;
-        case 'p': case 'P': return kVK_ANSI_P;
-        case 'q': case 'Q': return kVK_ANSI_Q;
-        case 'r': case 'R': return kVK_ANSI_R;
-        case 's': case 'S': return kVK_ANSI_S;
-        case 't': case 'T': return kVK_ANSI_T;
-        case 'u': case 'U': return kVK_ANSI_U;
-        case 'v': case 'V': return kVK_ANSI_V;
-        case 'w': case 'W': return kVK_ANSI_W;
-        case 'x': case 'X': return kVK_ANSI_X;
-        case 'y': case 'Y': return kVK_ANSI_Y;
-        case 'z': case 'Z': return kVK_ANSI_Z;
-				
+	{
+		// digits and arithmetic characters are sent as keypad keys (scanner-like)
+		case '0': k.code = kVK_ANSI_Keypad0; return true;
+		case '1': k.code = kVK_ANSI_Keypad1; return true;
+		case '2': k.code = kVK_ANSI_Keypad2; return true;
+		case '3': k.code = kVK_ANSI_Keypad3; return true;
+		case '4': k.code = kVK_ANSI_Keypad4; return true;
+		case '5': k.code = kVK_ANSI_Keypad5; return true;
+		case '6': k.code = kVK_ANSI_Keypad6; return true;
+		case '7': k.code = kVK_ANSI_Keypad7; return true;
+		case '8': k.code = kVK_ANSI_Keypad8; return true;
+		case '9': k.code = kVK_ANSI_Keypad9; return true;
+			
+		case '=': k.code = kVK_ANSI_KeypadEquals; return true;
+		case '-': k.code = kVK_ANSI_KeypadMinus; return true;
+		case '+': k.code = kVK_ANSI_KeypadPlus; return true;
+		case '*': k.code = kVK_ANSI_KeypadMultiply; return true;
+		case '\n': k.code = kVK_ANSI_KeypadEnter; return true;
+			
+		case '\r': k.code = kVK_Return; return true;
+		case '\t': k.code = kVK_Tab; return true;
+			
+		case ' ': k.code = kVK_Space; return true;
+			
+		// Shift + main-row digit
+		case ')': k.code = kVK_ANSI_0; k.shift = true; return true;
+		case '(': k.code = kVK_ANSI_9; k.shift = true; return true;
+		// Shift + semicolon key
+		case ':': k.code = kVK_ANSI_Semicolon; k.shift = true; return true;
+			
+		case ';': k.code = kVK_ANSI_Semicolon; return true;
+		case '\\': k.code = kVK_ANSI_Backslash; return true;
+		case ',': k.code = kVK_ANSI_Comma; return true;
+		case '/': k.code = kVK_ANSI_Slash; return true;
+		case '.': k.code = kVK_ANSI_Period; return true;
+			
+		case 'a': k.code = kVK_ANSI_A; return true;
+		case 'b': k.code = kVK_ANSI_B; return true;
+		case 'c': k.code = kVK_ANSI_C; return true;
+		case 'd': k.code = kVK_ANSI_D; return true;
+		case 'e': k.code = kVK_ANSI_E; return true;
+		case 'f': k.code = kVK_ANSI_F; return true;
+		case 'g': k.code = kVK_ANSI_G; return true;
+		case 'h': k.code = kVK_ANSI_H; return true;
+		case 'i': k.code = kVK_ANSI_I; return true;
+		case 'j': k.code = kVK_ANSI_J; return true;
+		case 'k': k.code = kVK_ANSI_K; return true;
+		case 'l': k.code = kVK_ANSI_L; return true;
+		case 'm': k.code = kVK_ANSI_M; return true;
+		case 'n': k.code = kVK_ANSI_N; return true;
+		case 'o': k.code = kVK_ANSI_O; return true;
+		case 'p': k.code = kVK_ANSI_P; return true;
+		case 'q': k.code = kVK_ANSI_Q; return true;
+		case 'r': k.code = kVK_ANSI_R; return true;
+		case 's': k.code = kVK_ANSI_S; return true;
+		case 't': k.code = kVK_ANSI_T; return true;
+		case 'u': k.code = kVK_ANSI_U; return true;
+		case 'v': k.code = kVK_ANSI_V; return true;
+		case 'w': k.code = kVK_ANSI_W; return true;
+		case 'x': k.code = kVK_ANSI_X; return true;
+		case 'y': k.code = kVK_ANSI_Y; return true;
+		case 'z': k.code = kVK_ANSI_Z; return true;
+			
 		default:
-			return kVK_Command;//just a harmless place holder
+			return false;
 	}
 }
+
+// CGEventCreateKeyboardEvent can return NULL; never post or release a NULL event
+static bool mac_post_key(CGEventSourceRef source, CGKeyCode code, bool down, bool shift)
+{
+	CGEventRef e = CGEventCreateKeyboardEvent(source, code, down);
+	if(!e)
+		return false;
+	
+	if(shift)
+		CGEventSetFlags(e, kCGEventFlagMaskShift);
+	
+	CGEventPost(kCGHIDEventTap, e);
+	CFRelease(e);
+	return true;
+}
+
+#else
+
+// append one keyboard event to the queue
+static void win_push_key(std::vector<INPUT> &queue, WORD vk, bool up)
+{
+	INPUT e;
+	ZeroMemory(&e, sizeof(e));
+	e.type = INPUT_KEYBOARD;
+	e.ki.wVk = vk;
+	if(up)
+		e.ki.dwFlags = KEYEVENTF_KEYUP;
+	queue.push_back(e);
+}
+
+// send the queued events in one call; returns false if Windows did not accept all of them
+// (e.g. blocked by UIPI when the foreground window is elevated)
+static bool win_flush_keys(std::vector<INPUT> &queue)
+{
+	bool ok = true;
+	if(!queue.empty())
+	{
+		UINT n = (UINT)queue.size();
+		ok = (SendInput(n, &queue[0], sizeof(INPUT)) == n);
+		queue.clear();
+	}
+	return ok;
+}
+
+// returns false if the character has no mapping on the current keyboard layout (it is then skipped)
+static bool win_key_for_char(PA_Unichar c, WORD &vk, BYTE &mods)
+{
+	mods = 0;
+	
+	switch (c)
+	{
+		case '\r':
+		case '\n':
+			vk = VK_RETURN;
+			return true;
+		case '\t':
+			vk = VK_TAB;
+			return true;
+	}
+	
+	// low byte: virtual key; high byte: bit 1 = Shift, bit 2 = Ctrl, bit 4 = Alt; -1 = no mapping
+	SHORT r = VkKeyScanW((WCHAR)c);
+	if(r == -1)
+		return false;
+	
+	vk = (WORD)LOBYTE(r);
+	mods = HIBYTE(r);
+	return true;
+}
+
 #endif
 
 void POST_TEXT(sLONG_PTR *pResult, PackagePtr pParams)
@@ -123,47 +218,57 @@ void POST_TEXT(sLONG_PTR *pResult, PackagePtr pParams)
 	Param1.copyUTF16String(&t);
 	
 #if VERSIONMAC
-	CGEventRef e;
+	// may be NULL; a NULL source is accepted by CGEventCreateKeyboardEvent (default source)
 	CGEventSourceRef eventSource = CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
-#else
-	DWORD now = GetTickCount();
-#endif
 	
-	
-	for(unsigned int i = 0; i < t.length(); ++i)
+	for(size_t i = 0; i < t.length(); ++i)
 	{
-		PA_Unichar c = t.at(i);
-
-		short code = VkKeyScan(c);
-
-#if VERSIONWIN
-
-    INPUT e[2];
+		MacKey k;
 		
-		ZeroMemory(e, sizeof(e));
-		e[0].type = e[1].type = INPUT_KEYBOARD;
-		e[0].ki.wVk = e[1].ki.wVk = code;
-		e[1].ki.dwFlags =KEYEVENTF_KEYUP;
+		if(!mac_key_for_char((UniChar)t[i], k))
+			continue;
 		
-		SendInput(2, e, sizeof(INPUT));
-
-#else
-
-		e = CGEventCreateKeyboardEvent (eventSource, (CGKeyCode)code, true);
-		CGEventPost(kCGHIDEventTap, e);
-		CFRelease(e);   
-			 
-		e = CGEventCreateKeyboardEvent (eventSource, (CGKeyCode)code, false);
-		CGEventPost(kCGHIDEventTap, e);
-		CFRelease(e);
-
-#endif
-	
+		if(!mac_post_key(eventSource, k.code, true, k.shift))
+			break;
+		
+		if(!mac_post_key(eventSource, k.code, false, k.shift))
+			break;
 	}
 	
-#if VERSIONMAC
-	CFRelease(eventSource);
+	if(eventSource)
+		CFRelease(eventSource);
+#else
+	std::vector<INPUT> queue;
+	queue.reserve(64);
+	
+	for(size_t i = 0; i < t.length(); ++i)
+	{
+		WORD vk;
+		BYTE mods;
+		
+		if(!win_key_for_char(t[i], vk, mods))
+			continue;
+		
+		if(mods & 1) win_push_key(queue, VK_SHIFT, false);
+		if(mods & 2) win_push_key(queue, VK_CONTROL, false);
+		if(mods & 4) win_push_key(queue, VK_MENU, false);
+		
+		win_push_key(queue, vk, false);
+		win_push_key(queue, vk, true);
+		
+		if(mods & 4) win_push_key(queue, VK_MENU, true);
+		if(mods & 2) win_push_key(queue, VK_CONTROL, true);
+		if(mods & 1) win_push_key(queue, VK_SHIFT, true);
+		
+		// flush in chunks so the queue stays small; each call is accepted or refused as a whole
+		if(queue.size() >= 128)
+		{
+			if(!win_flush_keys(queue))
+				return;
+		}
+	}
+	
+	win_flush_keys(queue);
 #endif
 	
 }
-
